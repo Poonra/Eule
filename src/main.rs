@@ -1,7 +1,12 @@
 use anyhow::{Context, Result};
 use askama::Template;
 use serde::Deserialize;
-
+struct Stock {
+    ticker: String,
+    quote: Quote,
+    next_earnings: Option<String>,
+    news: Vec<NewsItem>,
+}
 #[derive(Debug, Deserialize)]
 struct Quote {
     c: f64,  //current price
@@ -40,6 +45,13 @@ struct EarningsCalendar {
 struct EarningsEvent {
     date: String,
 }
+#[derive(Deserialize)]
+struct NewsItem {
+    headline: String,
+    summary: String,
+    source: String,
+    url: String,
+}
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -48,7 +60,7 @@ async fn main() -> Result<()> {
 
     let watchlist: Watchlist = toml::from_str(include_str!("../watchlist.toml"))?;
 
-    let mut rows: Vec<(String, Quote, Option<String>)> = Vec::new();
+    let mut stocks: Vec<Stock> = Vec::new();
 
     for ticker in &watchlist.tickers {
         let url = format!("https://finnhub.io/api/v1/quote?symbol={ticker}&token={key}");
@@ -64,19 +76,34 @@ async fn main() -> Result<()> {
         let cal: EarningsCalendar = reqwest::get(&cal_url).await?.json().await?;
         let next = cal.event.iter().map(|e| &e.date).min().cloned();
 
-        rows.push((ticker.clone(), quote, next));
+        let yesterday = today-chrono::Duration::days(1);
+        let news_url = format!("https://finnhub.io/api/v1/company-news?symbol={ticker}&from={}&to={}&token={key}",
+                               yesterday.format("%Y-%m-%d"),
+                               today.format("%Y-%m-%d")
+        );
+
+        let news: Vec<NewsItem> = reqwest::get(&news_url).await?.json().await?;
+
+        stocks.push(Stock {
+            ticker:ticker.clone(),
+            quote,
+            next_earnings:next,
+            news: news.into_iter().take(5).collect(),
+        });
+
+
     }
-    rows.sort_by(|a, b| b.1.dp.abs().total_cmp(&a.1.dp.abs()));
+    stocks.sort_by(|a, b| b.quote.dp.abs().total_cmp(&a.quote.dp.abs()));
 
     let briefing = Briefing {
         date: chrono::Local::now().format("%Y-%m-%d").to_string(),
-        rows: rows
+        rows: stocks
             .iter()
-            .map(|(ticker, q, next)| Row {
-                ticker: ticker.clone(),
-                price: format!("{:.2}", q.c),
-                change: format!("{:.2}", q.dp),
-                next_earnings: next.clone().unwrap_or_else(|| "—".into()),
+            .map(|s| Row {
+                ticker: s.ticker.clone(),
+                price: format!("{:.2}", s.quote.c),
+                change: format!("{:.2}", s.quote.dp),
+                next_earnings: s.next_earnings.clone().unwrap_or_else(|| "—".into()),
             })
             .collect(),
     };
