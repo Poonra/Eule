@@ -1,0 +1,12 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Eule {{ date }}</title></head>
+<body>
+<h1>Eule — {{ date }}</h1>
+<table>
+    {% for row in rows %}
+    <tr><td>{{ row.ticker }}</td><td>{{ row.price }}</td><td>{{ row.change }}</td></tr>
+    {% endfor %}
+</table>
+</body>
+</html>

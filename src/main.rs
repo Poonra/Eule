@@ -1,5 +1,7 @@
+use std::fs;
 use anyhow::{Context, Result};
 use serde::Deserialize;
+use askama::Template;
 
 #[derive(Debug, Deserialize)]
 struct Quote {
@@ -15,6 +17,18 @@ struct Watchlist {
     tickers: Vec<String>,
 }
 
+struct Row {
+    ticker: String,
+    price: String,
+    change: String,
+}
+
+#[derive(Template)]
+#[template(path = "briefing.html")]
+struct Briefing {
+    date: String,
+    rows: Vec<Row>,
+}
 #[tokio::main]
 async fn main() -> Result<()> {
     dotenvy::dotenv().ok();
@@ -31,9 +45,21 @@ async fn main() -> Result<()> {
     }
     rows.sort_by(|a, b| b.1.dp.abs().total_cmp(&a.1.dp.abs()));
 
-    for (ticker, quote) in &rows {
-        println!("{ticker:<5} {:>8.2} {:>+7.2}%", quote.c, quote.dp);
-    }
+    let briefing = Briefing {
+        date: chrono::Local::now().format("%Y-%m-%d").to_string(),
+        rows: rows
+            .iter()
+            .map(|(ticker, q)| Row {
+                ticker: ticker.clone(),
+                price: format!("{:.2}", q.c),
+                change: format!("{:.2}", q.dp),
+            })
+        .collect(),
+    };
+
+    std::fs::create_dir_all("out")?;
+    std::fs::write("out/index.html", briefing.render()?)?;
+    println!("write out/index.html");
 
     Ok(())
 }
