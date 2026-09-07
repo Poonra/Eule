@@ -6,6 +6,8 @@ edition = "2024"
 [dependencies]
 anyhow = "1.0.104"
 askama = "0.16.1"
+aws-config = "1.12.0"
+aws-sdk-bedrockruntime = "1.143.0"
 chrono = "0.4.45"
 dotenvy = "0.15.7"
 reqwest = { version = "0.13.4", default-features = false, features = ["rustls", "json"] }

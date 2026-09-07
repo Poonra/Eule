@@ -1,3 +1,5 @@
+mod llm;
+
 use anyhow::{Context, Result};
 use askama::Template;
 use serde::Deserialize;
@@ -61,6 +63,9 @@ async fn main() -> Result<()> {
     let watchlist: Watchlist = toml::from_str(include_str!("../watchlist.toml"))?;
 
     let mut stocks: Vec<Stock> = Vec::new();
+
+    let aws = aws_config::load_defaults(aws_config::BehaviorVersion::latest()).await;
+    let bedrock = aws_sdk_bedrockruntime::Client::new(&aws);
 
     for ticker in &watchlist.tickers {
         let url = format!("https://finnhub.io/api/v1/quote?symbol={ticker}&token={key}");
