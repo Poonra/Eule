@@ -2,8 +2,8 @@ mod llm;
 
 use anyhow::{Context, Result};
 use askama::Template;
-use serde::Deserialize;
 use aws_sdk_s3::primitives::ByteStream;
+use serde::Deserialize;
 struct Stock {
     ticker: String,
     quote: Quote,
@@ -58,10 +58,26 @@ struct NewsItem {
     source: String,
     url: String,
 }
-
 #[tokio::main]
 async fn main() -> Result<()> {
     dotenvy::dotenv().ok();
+
+    if std::env::var("AWS_LAMBDA_RUNTIME_API").is_ok() {
+        lambda_runtime::run(lambda_runtime::service_fn(handler))
+            .await
+            .map_err(|e| anyhow::anyhow!("{e}"))?;
+        Ok(())
+    } else {
+        run_briefing().await
+    }
+}
+
+async fn handler(
+    _event: lambda_runtime::LambdaEvent<serde_json::Value>,
+) -> Result<(), lambda_runtime::Error> {
+    run_briefing().await.map_err(|e| e.into())
+}
+async fn run_briefing() -> Result<()> {
     let key = std::env::var("FINNHUB_KEY").context("FINNHUB_KEY not set")?;
 
     let watchlist: Watchlist = toml::from_str(include_str!("../watchlist.toml"))?;
@@ -155,7 +171,6 @@ async fn main() -> Result<()> {
             println!("wrote out/index.html");
         }
     }
-
 
     Ok(())
 }
