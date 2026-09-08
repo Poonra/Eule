@@ -131,10 +131,17 @@ async fn run_briefing() -> Result<()> {
             explanation,
         });
     }
+
+    let session_day = stocks
+        .first()
+        .and_then(|s| chrono::DateTime::from_timestamp(s.quote.t, 0))
+        .map(|d| d.date_naive())
+        .context("no quotes fetched")?;
+
     stocks.sort_by(|a, b| b.quote.dp.abs().total_cmp(&a.quote.dp.abs()));
 
     let briefing = Briefing {
-        date: chrono::Local::now().format("%Y-%m-%d").to_string(),
+        date: session_day.to_string(),
         rows: stocks
             .iter()
             .map(|s| Row {
