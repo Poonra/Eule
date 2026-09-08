@@ -6,7 +6,12 @@
 <table>
     {% for row in rows %}
     <tr><td>{{ row.ticker }}</td><td>{{ row.price }}</td><td>{{ row.change }}</td><td>{{
-        row.next_earnings }}</td> <td>{{ row.explanation }}</td></tr>
+        row.next_earnings }}</td> <td>{{ row.explanation }}
+        <ul>
+            {% for n in row.news %}
+            <li><a href="{{ n.url }}">{{ n.headline }}</a> ({{ n.source }})</li>
+            {% endfor %}
+        </ul></td></tr>
     {% endfor %}
 </table>
 </body>

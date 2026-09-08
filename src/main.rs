@@ -30,6 +30,7 @@ struct Row {
     change: String,
     next_earnings: String,
     explanation: String,
+    news: Vec<NewsItem>,
 }
 
 #[derive(Template)]
@@ -49,7 +50,7 @@ struct EarningsCalendar {
 struct EarningsEvent {
     date: String,
 }
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone)]
 struct NewsItem {
     headline: String,
     summary: String,
@@ -83,18 +84,18 @@ async fn main() -> Result<()> {
         let cal: EarningsCalendar = reqwest::get(&cal_url).await?.json().await?;
         let next = cal.event.iter().map(|e| &e.date).min().cloned();
 
-        let yesterday = today-chrono::Duration::days(1);
-        let news_url = format!("https://finnhub.io/api/v1/company-news?symbol={ticker}&from={}&to={}&token={key}",
-                               yesterday.format("%Y-%m-%d"),
-                               today.format("%Y-%m-%d")
+        let quote_day = chrono::DateTime::from_timestamp(quote.t, 0)
+            .context("bad quote timestamp")?
+            .date_naive();
+        let news_url = format!(
+            "https://finnhub.io/api/v1/company-news?symbol={ticker}&from={quote_day}&to={quote_day}&token={key}"
         );
 
         let news: Vec<NewsItem> = reqwest::get(&news_url).await?.json().await?;
         let news: Vec<NewsItem> = news.into_iter().take(5).collect();
 
-
         let headlines = news
-        .iter()
+            .iter()
             .map(|n| format!("- {} ({}): {}", n.headline, n.source, n.summary))
             .collect::<Vec<_>>()
             .join("\n");
@@ -106,14 +107,12 @@ async fn main() -> Result<()> {
         };
 
         stocks.push(Stock {
-            ticker:ticker.clone(),
+            ticker: ticker.clone(),
             quote,
-            next_earnings:next,
+            next_earnings: next,
             news,
             explanation,
         });
-
-
     }
     stocks.sort_by(|a, b| b.quote.dp.abs().total_cmp(&a.quote.dp.abs()));
 
@@ -124,9 +123,10 @@ async fn main() -> Result<()> {
             .map(|s| Row {
                 ticker: s.ticker.clone(),
                 price: format!("{:.2}", s.quote.c),
-                change: format!("{:.2}", s.quote.dp),
+                change: format!("{:+.2}%", s.quote.dp),
                 next_earnings: s.next_earnings.clone().unwrap_or_else(|| "—".into()),
                 explanation: s.explanation.clone(),
+                news: s.news.clone(),
             })
             .collect(),
     };
