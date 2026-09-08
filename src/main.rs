@@ -3,6 +3,7 @@ mod llm;
 use anyhow::{Context, Result};
 use askama::Template;
 use serde::Deserialize;
+use aws_sdk_s3::primitives::ByteStream;
 struct Stock {
     ticker: String,
     quote: Quote,
@@ -131,9 +132,30 @@ async fn main() -> Result<()> {
             .collect(),
     };
 
-    std::fs::create_dir_all("out")?;
-    std::fs::write("out/index.html", briefing.render()?)?;
-    println!("write out/index.html");
+    let html = briefing.render()?;
+
+    match std::env::var("OUTPUT_TARGET").as_deref() {
+        Ok("s3") => {
+            let bucket = std::env::var("S3_BUCKET").context("S3_BUCKET not set")?;
+            let s3 = aws_sdk_s3::Client::new(&aws);
+            for key in ["index.html".to_string(), format!("{}.html", briefing.date)] {
+                s3.put_object()
+                    .bucket(&bucket)
+                    .key(&key)
+                    .body(ByteStream::from(html.clone().into_bytes()))
+                    .content_type("text/html; charset=utf-8")
+                    .send()
+                    .await?;
+            }
+            println!("wrote s3://{bucket}/index.html");
+        }
+        _ => {
+            std::fs::create_dir_all("out")?;
+            std::fs::write("out/index.html", &html)?;
+            println!("wrote out/index.html");
+        }
+    }
+
 
     Ok(())
 }
