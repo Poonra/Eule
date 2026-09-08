@@ -1,21 +1,23 @@
 use anyhow::Result;
 use aws_sdk_bedrockruntime::Client;
 use aws_sdk_bedrockruntime::types::{
-    ContentBlock, ConversationRole, InferenceConfiguration, Message,
+    ContentBlock, ConversationRole, InferenceConfiguration, Message,SystemContentBlock,
 };
 
-const MODEL: &str = "eu.amzon.nova-lite-v1:0";
+const MODEL: &str = "eu.anthropic.claude-haiku-4-5-20251001-v1:0";
+
+const SYSTEM: &str ="You explain single-day stock price moves in one sentence,
+using only the headlines provided. Never invent a cause. Reply with the sentence only,
+no preamble and no restating of these rules.
+If the headlines do not explain the move, reply with exactly this and nothing more:
+\"No clear driver.\"";
 
 pub async fn explain_move(client: &Client, ticker: &str, dp: f64, headlines: &str)->Result<String>{
-    let prompt = format!("{ticker} moved {dp:+.2}% today. Headlines from the last 24 hours:\n\
-         {headlines}\n\n\
-         Explain the move in one - two sentence, using only these headlines. \
-         If they do not explain the move, answer exactly: No clear driver. \
-         Never invent a cause.");
+    let prompt = format!("{ticker} moved {dp:+.2}% today.\n\nHeadlines from the last 24 hours:\n{headlines}");
 
         let resp = client
             .converse()
-            .model_id(MODEL)
+            .model_id(MODEL).system(SystemContentBlock::Text(SYSTEM.to_string()))
             .messages(
                 Message::builder()
                     .role(ConversationRole::User)
@@ -34,6 +36,6 @@ pub async fn explain_move(client: &Client, ticker: &str, dp: f64, headlines: &st
         .cloned()
         .unwrap_or_else(|| "No clear driver.".into());
 
-    Ok(text.trim().to_string())
+    Ok(text.trim().trim_matches('"').trim().to_string())
 
 }

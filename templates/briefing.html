@@ -6,7 +6,7 @@
 <table>
     {% for row in rows %}
     <tr><td>{{ row.ticker }}</td><td>{{ row.price }}</td><td>{{ row.change }}</td><td>{{
-        row.next_earnings }}</td></tr>
+        row.next_earnings }}</td> <td>{{ row.explanation }}</td></tr>
     {% endfor %}
 </table>
 </body>

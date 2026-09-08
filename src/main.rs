@@ -8,6 +8,7 @@ struct Stock {
     quote: Quote,
     next_earnings: Option<String>,
     news: Vec<NewsItem>,
+    explanation: String,
 }
 #[derive(Debug, Deserialize)]
 struct Quote {
@@ -28,6 +29,7 @@ struct Row {
     price: String,
     change: String,
     next_earnings: String,
+    explanation: String,
 }
 
 #[derive(Template)]
@@ -88,12 +90,27 @@ async fn main() -> Result<()> {
         );
 
         let news: Vec<NewsItem> = reqwest::get(&news_url).await?.json().await?;
+        let news: Vec<NewsItem> = news.into_iter().take(5).collect();
+
+
+        let headlines = news
+        .iter()
+            .map(|n| format!("- {} ({}): {}", n.headline, n.source, n.summary))
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        let explanation = if news.is_empty() {
+            "no clear driver".to_string()
+        } else {
+            llm::explain_move(&bedrock, ticker, quote.dp, &headlines).await?
+        };
 
         stocks.push(Stock {
             ticker:ticker.clone(),
             quote,
             next_earnings:next,
-            news: news.into_iter().take(5).collect(),
+            news,
+            explanation,
         });
 
 
@@ -109,6 +126,7 @@ async fn main() -> Result<()> {
                 price: format!("{:.2}", s.quote.c),
                 change: format!("{:.2}", s.quote.dp),
                 next_earnings: s.next_earnings.clone().unwrap_or_else(|| "—".into()),
+                explanation: s.explanation.clone(),
             })
             .collect(),
     };
