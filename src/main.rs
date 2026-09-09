@@ -80,12 +80,12 @@ async fn handler(
 async fn run_briefing() -> Result<()> {
     let key = std::env::var("FINNHUB_KEY").context("FINNHUB_KEY not set")?;
 
-    let watchlist: Watchlist = toml::from_str(include_str!("../watchlist.toml"))?;
-
     let mut stocks: Vec<Stock> = Vec::new();
 
     let aws = aws_config::load_defaults(aws_config::BehaviorVersion::latest()).await;
     let bedrock = aws_sdk_bedrockruntime::Client::new(&aws);
+
+    let watchlist = load_watchlist(&aws).await?;
 
     for ticker in &watchlist.tickers {
         let url = format!("https://finnhub.io/api/v1/quote?symbol={ticker}&token={key}");
@@ -180,4 +180,17 @@ async fn run_briefing() -> Result<()> {
     }
 
     Ok(())
+}
+
+async fn load_watchlist(aws: &aws_config::SdkConfig) -> Result<(Watchlist)> {
+    let text = match std::env::var("OUTPUT_TARGET").as_deref() {
+        Ok("s3") => {
+            let bucket = std::env::var("S3_BUCKET").context("S3_BUCKET not set")?;
+            let s3 = aws_sdk_s3::Client::new(&aws);
+            let obj = s3.get_object().bucket(&bucket).key("watchlist.toml").send().await.context("reading watchlist.toml from s")?;
+            String::from_utf8(obj.body.collect().await?.to_vec())?
+        }
+        _=> std::fs::read_to_string("watchlist.toml")?
+    };
+    Ok(toml::from_str(&text)?)
 }
