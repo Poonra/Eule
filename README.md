@@ -128,11 +128,7 @@ always-on. Set a billing alarm anyway.
 - **The page is world-readable** once the bucket is public. It is a stock summary, so that is
   usually fine — but it is a decision, not a default to ignore.
 
-## Development
+<img width="1112" height="1276" alt="image" src="https://github.com/user-attachments/assets/9abc2697-f850-44aa-abb7-add0d4e6e06f" />
 
-```
-cargo test     # unit tests, no network
-cargo clippy
-```
 
 
