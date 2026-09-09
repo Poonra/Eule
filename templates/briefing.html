@@ -1,18 +1,57 @@
 <!doctype html>
 <html>
-<head><meta charset="utf-8"><title>Eule {{ date }}</title></head>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Eule {{ date }}</title>
+    <style>
+        :root {
+            --bg: #fff; --fg: #111; --muted: #666; --line: #e5e5e5;
+            --up: #16a34a; --down: #dc2626;
+        }
+        @media (prefers-color-scheme: dark) {
+            :root { --bg: #111; --fg: #eee; --muted: #999; --line: #2a2a2a;
+                --up: #4ade80; --down: #f87171; }
+        }
+        body {
+            background: var(--bg); color: var(--fg);
+            font: 16px/1.5 -apple-system, system-ui, sans-serif;
+            max-width: 40rem; margin: 0 auto; padding: 1rem;
+        }
+        h1 { font-size: 1.25rem; }
+        h1 .date { color: var(--muted); font-weight: normal; }
+        article { border-top: 1px solid var(--line); padding: .75rem 0; }
+        .head { display: flex; align-items: baseline; gap: .5rem; }
+        .ticker { font-weight: 600; }
+        .price { color: var(--muted); }
+        .chg { margin-left: auto; font-variant-numeric: tabular-nums; }
+        .up { color: var(--up); }
+        .down { color: var(--down); }
+        .why { margin: .4rem 0; }
+        .foot, .src { color: var(--muted); font-size: .85rem; }
+        ul { margin: .4rem 0 0; padding-left: 1.1rem; }
+        li { font-size: .9rem; margin: .2rem 0; }
+        a { color: inherit; }
+    </style>
+</head>
 <body>
-<h1>Eule — {{ date }}</h1>
-<table>
-    {% for row in rows %}
-    <tr><td>{{ row.ticker }}</td><td>{{ row.price }}</td><td>{{ row.change }}</td><td>{{
-        row.next_earnings }}</td> <td>{{ row.explanation }}
-        <ul>
-            {% for n in row.news %}
-            <li><a href="{{ n.url }}">{{ n.headline }}</a> ({{ n.source }})</li>
-            {% endfor %}
-        </ul></td></tr>
-    {% endfor %}
-</table>
+<h1>Eule <span class="date">{{ date }}</span></h1>
+
+{% for row in rows %}
+<article>
+    <div class="head">
+        <span class="ticker">{{ row.ticker }}</span>
+        <span class="price">{{ row.price }}</span>
+        <span class="chg {% if row.change.starts_with("+")%}up{% else %}down{% endif %}">{{ row.change }}</span>
+    </div>
+    <p class="why">{{ row.explanation }}</p>
+    <p class="foot">Next earnings {{ row.next_earnings }}</p>
+    <ul>
+        {% for n in row.news %}
+        <li><a href="{{ n.url }}">{{ n.headline }}</a> <span class="src">{{ n.source }}</span></li>
+        {% endfor %}
+    </ul>
+</article>
+{% endfor %}
 </body>
 </html>
