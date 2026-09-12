@@ -46,7 +46,7 @@ pub async fn explain_move(
                 .content(ContentBlock::Text(prompt))
                 .build()?,
         )
-        .inference_config(InferenceConfiguration::builder().max_tokens(100).build())
+        .inference_config(InferenceConfiguration::builder().max_tokens(300).build())
         .send()
         .await?;
 
