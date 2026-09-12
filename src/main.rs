@@ -1,74 +1,11 @@
 mod llm;
+mod models;
 
 use anyhow::{Context, Result};
 use askama::Template;
 use aws_sdk_s3::primitives::ByteStream;
-use serde::Deserialize;
-struct Stock {
-    ticker: String,
-    quote: Quote,
-    next_earnings: Option<String>,
-    news: Vec<NewsItem>,
-    explanation: String,
-    last_earnings: Option<String>,
-}
-#[derive(Debug, Deserialize)]
-#[allow(dead_code)]
-struct Quote {
-    c: f64,  //current price
-    d: f64,  //change
-    dp: f64, //change %
-    pc: f64, //previous close
-    t: i64,  //quote timestamp
-}
+use models::*;
 
-#[derive(Deserialize)]
-struct Watchlist {
-    tickers: Vec<String>,
-}
-
-struct Row {
-    ticker: String,
-    price: String,
-    change: String,
-    next_earnings: String,
-    explanation: String,
-    news: Vec<NewsItem>,
-    last_earnings: String,
-}
-
-#[derive(Template)]
-#[template(path = "briefing.html")]
-struct Briefing {
-    date: String,
-    rows: Vec<Row>,
-}
-
-#[derive(Deserialize)]
-struct EarningsCalendar {
-    #[serde(rename = "earningsCalendar")]
-    event: Vec<EarningsEvent>,
-}
-
-#[derive(Deserialize)]
-struct EarningsEvent {
-    date: String,
-    #[serde(rename = "epsEstimate")]
-    eps_estimate: Option<f64>,
-    #[serde(rename = "epsActual")]
-    eps_actual: Option<f64>,
-    #[serde(rename = "revenueEstimate")]
-    revenue_estimate: Option<f64>,
-    #[serde(rename = "revenueActual")]
-    revenue_actual: Option<f64>,
-}
-#[derive(Deserialize, Clone)]
-struct NewsItem {
-    headline: String,
-    summary: String,
-    source: String,
-    url: String,
-}
 #[tokio::main]
 async fn main() -> Result<()> {
     dotenvy::dotenv().ok();
@@ -268,47 +205,3 @@ fn last_earnings_line(e: &EarningsEvent) -> Option<String> {
     Some(s)
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn ev(date: &str, actual: Option<f64>, estimate: Option<f64>) -> EarningsEvent {
-        EarningsEvent {
-            date: date.into(),
-            eps_actual: actual,
-            eps_estimate: estimate,
-            revenue_actual: None,
-            revenue_estimate: None,
-        }
-    }
-
-    #[test]
-    fn next_earnings_ignores_the_past_quarter() {
-        // the real NVDA shape: one reported quarter behind, one scheduled ahead
-        let events = [
-            ev("2026-11-17", None, Some(2.4659)),
-            ev("2026-08-26", Some(2.22), Some(2.1384)),
-        ];
-        let session = "2026-09-11".to_string();
-
-        let next = events
-            .iter()
-            .filter(|e| e.date >= session)
-            .map(|e| e.date.clone())
-            .min();
-        assert_eq!(next.as_deref(), Some("2026-11-17"));
-
-        let last = events
-            .iter()
-            .filter(|e| e.eps_actual.is_some())
-            .max_by(|a, b| a.date.cmp(&b.date))
-            .unwrap();
-        assert_eq!(last.date, "2026-08-26");
-        assert!(last_earnings_line(last).unwrap().contains("beat"));
-    }
-
-    #[test]
-    fn no_line_until_the_actual_is_published() {
-        assert!(last_earnings_line(&ev("2026-11-17", None, Some(2.46))).is_none());
-    }
-}
