@@ -146,7 +146,7 @@ async fn run_briefing() -> Result<()> {
             .and_then(last_earnings_line);
 
         let explanation = if news.is_empty() {
-            "no clear driver.".to_string()
+            "No clear driver.".to_string()
         } else {
             llm::explain_move(&bedrock, ticker, quote.dp, &headlines, reported_today.as_deref()).await?
         };
