@@ -45,7 +45,8 @@
         <span class="chg {% if row.change.starts_with("+")%}up{% else %}down{% endif %}">{{ row.change }}</span>
     </div>
     <p class="why">{{ row.explanation }}</p>
-    <p class="foot">Next earnings {{ row.next_earnings }}</p>
+    <p class="foot">Next earnings {{ row.next_earnings }}
+        {%- if !row.last_earnings.is_empty() %} · last {{ row.last_earnings }}{% endif %}</p>
     <ul>
         {% for n in row.news %}
         <li><a href="{{ n.url }}">{{ n.headline }}</a> <span class="src">{{ n.source }}</span></li>

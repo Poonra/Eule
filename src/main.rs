@@ -10,14 +10,16 @@ struct Stock {
     next_earnings: Option<String>,
     news: Vec<NewsItem>,
     explanation: String,
+    last_earnings: Option<String>,
 }
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct Quote {
-    c: f64,  //current price
+    c: f64,   //current price
     d: f64,  //change
-    dp: f64, //change %
+    dp: f64,  //change %
     pc: f64, //previous close
-    t: i64,  //quote timestamp
+    t: i64,   //quote timestamp
 }
 
 #[derive(Deserialize)]
@@ -32,6 +34,7 @@ struct Row {
     next_earnings: String,
     explanation: String,
     news: Vec<NewsItem>,
+    last_earnings: String,
 }
 
 #[derive(Template)]
@@ -50,6 +53,14 @@ struct EarningsCalendar {
 #[derive(Deserialize)]
 struct EarningsEvent {
     date: String,
+    #[serde(rename = "epsEstimate")]
+    eps_estimate: Option<f64>,
+    #[serde(rename = "epsActual")]
+    eps_actual: Option<f64>,
+    #[serde(rename = "revenueEstimate")]
+    revenue_estimate: Option<f64>,
+    #[serde(rename = "revenueActual")]
+    revenue_actual: Option<f64>,
 }
 #[derive(Deserialize, Clone)]
 struct NewsItem {
@@ -91,19 +102,30 @@ async fn run_briefing() -> Result<()> {
         let url = format!("https://finnhub.io/api/v1/quote?symbol={ticker}&token={key}");
         let quote: Quote = reqwest::get(&url).await?.json().await?;
 
-        let today = chrono::Local::now();
-        let horizon = today + chrono::Duration::days(90);
-        let cal_url = format!(
-            "https://finnhub.io/api/v1/calendar/earnings?from={}&to={}&symbol={ticker}&token={key}",
-            today.format("%Y-%m-%d"),
-            horizon.format("%Y-%m-%d")
-        );
-        let cal: EarningsCalendar = reqwest::get(&cal_url).await?.json().await?;
-        let next = cal.event.iter().map(|e| &e.date).min().cloned();
-
         let quote_day = chrono::DateTime::from_timestamp(quote.t, 0)
             .context("bad quote timestamp")?
             .date_naive();
+        let session = quote_day.to_string();
+        let cal_url = format!(
+            "https://finnhub.io/api/v1/calendar/earnings?from={}&to={}&symbol={ticker}&token={key}",
+            quote_day - chrono::Duration::days(90),
+            quote_day + chrono::Duration::days(90)
+        );
+        let cal: EarningsCalendar = reqwest::get(&cal_url).await?.json().await?;
+        let next = cal
+            .event
+            .iter()
+            .filter(|e| e.date >= session)
+            .map(|e| e.date.clone())
+            .min();
+
+        let last_earnings = cal
+            .event
+            .iter()
+            .filter(|e| e.eps_actual.is_some())
+            .max_by(|a, b| a.date.cmp(&b.date))
+            .and_then(last_earnings_line);
+
         let news_url = format!(
             "https://finnhub.io/api/v1/company-news?symbol={ticker}&from={quote_day}&to={quote_day}&token={key}"
         );
@@ -129,6 +151,7 @@ async fn run_briefing() -> Result<()> {
             next_earnings: next,
             news,
             explanation,
+            last_earnings,
         });
     }
 
@@ -151,6 +174,7 @@ async fn run_briefing() -> Result<()> {
                 next_earnings: s.next_earnings.clone().unwrap_or_else(|| "—".into()),
                 explanation: s.explanation.clone(),
                 news: s.news.clone(),
+                last_earnings: s.last_earnings.clone().unwrap_or_default(),
             })
             .collect(),
     };
@@ -182,15 +206,96 @@ async fn run_briefing() -> Result<()> {
     Ok(())
 }
 
-async fn load_watchlist(aws: &aws_config::SdkConfig) -> Result<(Watchlist)> {
+async fn load_watchlist(aws: &aws_config::SdkConfig) -> Result<Watchlist> {
     let text = match std::env::var("OUTPUT_TARGET").as_deref() {
         Ok("s3") => {
             let bucket = std::env::var("S3_BUCKET").context("S3_BUCKET not set")?;
-            let s3 = aws_sdk_s3::Client::new(&aws);
-            let obj = s3.get_object().bucket(&bucket).key("watchlist.toml").send().await.context("reading watchlist.toml from s")?;
+            let s3 = aws_sdk_s3::Client::new(aws);
+            let obj = s3
+                .get_object()
+                .bucket(&bucket)
+                .key("watchlist.toml")
+                .send()
+                .await
+                .context("reading watchlist.toml from s")?;
             String::from_utf8(obj.body.collect().await?.to_vec())?
         }
-        _=> std::fs::read_to_string("watchlist.toml")?
+        _ => std::fs::read_to_string("watchlist.toml")?,
     };
     Ok(toml::from_str(&text)?)
+}
+
+fn money(v: f64) -> String {
+    if v.abs() >= 1e9 {
+        format!("${:.1}B", v / 1e9)
+    } else if v.abs() >= 1e6 {
+        format!("${:.1}M", v / 1e6)
+    } else {
+        format!("${v:.0}")
+    }
+}
+
+fn last_earnings_line(e: &EarningsEvent) -> Option<String> {
+    let actual = e.eps_actual?;
+    let estimate = e.eps_estimate?;
+
+    let verdict = match actual.partial_cmp(&estimate)? {
+        std::cmp::Ordering::Greater => "beat",
+        std::cmp::Ordering::Less => "miss",
+        std::cmp::Ordering::Equal => "in line",
+    };
+
+    let mut s = format!(
+        "{} {verdict} · EPS ${actual:.2} vs ${estimate:.2} est",
+        e.date
+    );
+    if let (Some(a), Some(est)) = (e.revenue_actual, e.revenue_estimate) {
+        s += &format!(" · rev {} vs {} est", money(a), money(est));
+    }
+    Some(s)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn ev(date: &str, actual: Option<f64>, estimate: Option<f64>) -> EarningsEvent {
+        EarningsEvent {
+            date: date.into(),
+            eps_actual: actual,
+            eps_estimate: estimate,
+            revenue_actual: None,
+            revenue_estimate: None,
+        }
+    }
+
+    #[test]
+    fn next_earnings_ignores_the_past_quarter() {
+        // the real NVDA shape: one reported quarter behind, one scheduled ahead
+        let events = [
+            ev("2026-11-17", None, Some(2.4659)),
+            ev("2026-08-26", Some(2.22), Some(2.1384)),
+        ];
+        let session = "2026-09-11".to_string();
+
+        let next = events
+            .iter()
+            .filter(|e| e.date >= session)
+            .map(|e| e.date.clone())
+            .min();
+        assert_eq!(next.as_deref(), Some("2026-11-17"));
+
+        let last = events
+            .iter()
+            .filter(|e| e.eps_actual.is_some())
+            .max_by(|a, b| a.date.cmp(&b.date))
+            .unwrap();
+        assert_eq!(last.date, "2026-08-26");
+        assert!(last_earnings_line(last).unwrap().contains("beat"));
+    }
+
+    #[test]
+    fn no_line_until_the_actual_is_published() {
+        assert!(last_earnings_line(&ev("2026-11-17", None, Some(2.46))).is_none());
+    }
 }
