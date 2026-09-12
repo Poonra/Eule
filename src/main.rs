@@ -139,10 +139,16 @@ async fn run_briefing() -> Result<()> {
             .collect::<Vec<_>>()
             .join("\n");
 
+        let reported_today = cal
+            .event
+            .iter()
+            .find(|e| e.date == session)
+            .and_then(last_earnings_line);
+
         let explanation = if news.is_empty() {
-            "no clear driver".to_string()
+            "no clear driver.".to_string()
         } else {
-            llm::explain_move(&bedrock, ticker, quote.dp, &headlines).await?
+            llm::explain_move(&bedrock, ticker, quote.dp, &headlines, reported_today.as_deref()).await?
         };
 
         stocks.push(Stock {
