@@ -15,11 +15,11 @@ struct Stock {
 #[derive(Debug, Deserialize)]
 #[allow(dead_code)]
 struct Quote {
-    c: f64,   //current price
+    c: f64,  //current price
     d: f64,  //change
-    dp: f64,  //change %
+    dp: f64, //change %
     pc: f64, //previous close
-    t: i64,   //quote timestamp
+    t: i64,  //quote timestamp
 }
 
 #[derive(Deserialize)]
@@ -148,7 +148,14 @@ async fn run_briefing() -> Result<()> {
         let explanation = if news.is_empty() {
             "No clear driver.".to_string()
         } else {
-            llm::explain_move(&bedrock, ticker, quote.dp, &headlines, reported_today.as_deref()).await?
+            llm::explain_move(
+                &bedrock,
+                ticker,
+                quote.dp,
+                &headlines,
+                reported_today.as_deref(),
+            )
+            .await?
         };
 
         stocks.push(Stock {

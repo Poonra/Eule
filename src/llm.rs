@@ -6,7 +6,7 @@ use aws_sdk_bedrockruntime::types::{
 
 const MODEL: &str = "eu.anthropic.claude-haiku-4-5-20251001-v1:0";
 
-const SYSTEM: &str =  "You explain a single-day stock price move, using only the material provided.
+const SYSTEM: &str = "You explain a single-day stock price move, using only the material provided.
 
   Write one sentence naming the most likely driver, drawn from a specific headline. Add a
   second sentence only when the material contains a concrete figure, product, customer,
